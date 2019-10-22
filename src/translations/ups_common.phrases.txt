@@ -1,0 +1,42 @@
+"Phrases"
+{
+    "UPS.YouRePunished"
+    {
+        "en"        "You're punished!"
+        "ru"        "Вы наказаны!"
+    }
+
+    "UPS.AdministratorName"
+    {
+        "#format"   "{1:s}"
+        "en"        "Administrator name: {1}"
+        "ru"        "Имя Администратора: {1}"
+    }
+
+    "UPS.Reason"
+    {
+        "#format"   "{1:s}"
+        "en"        "Reason: {1}"
+        "ru"        "Причина: {1}"
+    }
+
+    "UPS.Expires"
+    {
+        "#format"   "{1:s}"
+        "en"        "Expires: {1}"
+        "ru"        "Истекает: {1}"
+    }
+
+    "UPS.BannedOnServer"
+    {
+        "#format"   "{1:s}"
+        "en"        "Banned on {1}"
+        "ru"        "Наказан на {1}"
+    }
+
+    "UPS.NeverExpire"
+    {
+        "en"        "Never"
+        "ru"        "Никогда"
+    }
+}

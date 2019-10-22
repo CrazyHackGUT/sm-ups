@@ -9,9 +9,85 @@
 #include <sourcemod>
 #include <dbi>
 #include <ups>
+methodmap Callable < Handle
+{
+    public Callable(Handle hPlugin, Function ptrCall)
+    {
+        DataPack hPack = new DataPack();
+        hPack.WriteCell(hPlugin);
+        hPack.WriteFunction(ptrCall);
+
+        return view_as<Callable>(hPack);
+    }
+
+    property Handle Plugin
+    {
+        public get()
+        {
+            DataPack hPack = view_as<DataPack>(this);
+
+            hPack.Reset();
+            return hPack.ReadCell();
+        }
+
+        public set(Handle hPlugin)
+        {
+            DataPack hPack = view_as<DataPack>(this);
+
+            hPack.Reset();
+            hPack.WriteCell(hPlugin);
+        }
+    }
+
+    property Function FuncPointer
+    {
+        public get()
+        {
+            DataPack hPack = view_as<DataPack>(this);
+
+            hPack.Reset();
+            hPack.ReadCell();
+            return hPack.ReadFunction();
+        }
+
+        public set(Function ptrFunc)
+        {
+            DataPack hPack = view_as<DataPack>(this);
+
+            hPack.Reset();
+            hPack.ReadCell();
+            hPack.WriteFunction(ptrFunc);
+        }
+    }
+
+    public bool IsValid()
+    {
+        Handle hPlugin = this.Plugin;
+        bool bValid = false;
+        Handle hIter = GetPluginIterator();
+        while (MorePlugins(hIter))
+        {
+            if (hPlugin == ReadPlugin(hIter))
+            {
+                bValid = true;
+                break;
+            }
+        }
+
+        hIter.Close();
+        return bValid;
+    }
+
+    public void Start()
+    {
+        Call_StartFunction(this.Plugin, this.FuncPointer);
+    }
+}
 
 bool    g_bReady = false;
 
+int         g_iServerID;
+StringMap   g_hHandlers;
 KeyValues   g_hConfiguration;
 Database    g_hDB;
 
@@ -30,7 +106,7 @@ Database    g_hDB;
 
 public Plugin myinfo = {
     description = "Punishments loader",
-    version     = "0.0.0.1",
+    version     = "0.0.0.2",
     author      = "CrazyHackGUT aka Kruzya",
     name        = "[UPS] Core",
     url         = "https://kruzya.me"
@@ -39,6 +115,10 @@ public Plugin myinfo = {
 /**
  * @section API
  */
+#define _NATIVECALL(%0)         public int %0(Handle hPlugin, int iNumParams)
+#define _NATIVE_SIMPLE(%0)      _NATIVECALL(Native_%0)
+#define _NATIVE_METHODMAP(%0)   _NATIVECALL(Methodmap_%0)
+
 public APLRes AskPluginLoad2(Handle hMySelf, bool bLate, char[] szBuffer, int iBufferLength)
 {
     // Natives
@@ -47,15 +127,33 @@ public APLRes AskPluginLoad2(Handle hMySelf, bool bLate, char[] szBuffer, int iB
     CreateNative("UPS_RegisterPunishmentType",      Native_RegisterPunishmentType);
     CreateNative("UPS_UnregisterPunishmentType",    Native_UnregisterPunishmentType);
 
+    // Methodmap "UPSPunishment"
+    CreateNative("UPSPunishment.PunishmentId.get",      Methodmap_UPSPunishment_PunishmentId_get);
+    CreateNative("UPSPunishment.AdministratorId.get",   Methodmap_UPSPunishment_AdministratorId_get);
+    CreateNative("UPSPunishment.PlayerId.get",          Methodmap_UPSPunishment_PlayerId_get);
+    CreateNative("UPSPunishment.Created.get",           Methodmap_UPSPunishment_Created_get);
+    CreateNative("UPSPunishment.Ends.get",              Methodmap_UPSPunishment_Ends_get);
+    CreateNative("UPSPunishment.Length.get",            Methodmap_UPSPunishment_Length_get);
+    CreateNative("UPSPunishment.ServerPort.get",        Methodmap_UPSPunishment_ServerPort_get);
+    CreateNative("UPSPunishment.GetAdministratorIP",    Methodmap_UPSPunishment_GetAdministratorIP);
+    CreateNative("UPSPunishment.GetPlayerIP",           Methodmap_UPSPunishment_GetPlayerIP);
+    CreateNative("UPSPunishment.GetServerIP",           Methodmap_UPSPunishment_GetServerIP);
+    CreateNative("UPSPunishment.GetAdministratorName",  Methodmap_UPSPunishment_GetAdministratorName);
+    CreateNative("UPSPunishment.GetPlayerName",         Methodmap_UPSPunishment_GetPlayerName);
+    CreateNative("UPSPunishment.GetServerHostname",     Methodmap_UPSPunishment_GetServerHostname);
+    CreateNative("UPSPunishment.GetReason",             Methodmap_UPSPunishment_GetReason);
+
+    g_hHandlers = new StringMap();
+
     RegPluginLibrary("ups");
 }
 
-public int Native_GetDatabase(Handle hPlugin, int iNumParams)
+_NATIVE_SIMPLE(GetDatabase)
 {
     return view_as<int>(APIUTIL_CloneHandle(g_hDB, hPlugin));
 }
 
-public int Native_GetConfiguration(Handle hPlugin, int iNumParams)
+_NATIVE_SIMPLE(GetConfiguration)
 {
     return view_as<int>(APIUTIL_CloneHandle(g_hConfiguration, hPlugin));
 }
@@ -65,7 +163,92 @@ Handle APIUTIL_CloneHandle(Handle hHandle, Handle hPlugin)
     return hHandle ? CloneHandle(hHandle, hPlugin) : null;
 }
 
-public int Native_RegisterPunishmentType() {}
+_NATIVE_SIMPLE(RegisterPunishmentType)
+{
+    char szPunishmentType[64];
+    GetNativeString(1, szPunishmentType, sizeof(szPunishmentType));
+
+    Callable hCallable;
+    if (g_hHandlers.GetValue(szPunishmentType, hCallable))
+    {
+        return ThrowNativeError(SP_ERROR_NATIVE, "Handler for this punishment type (%s) already registered", szPunishmentType);
+    }
+
+    g_hHandlers.SetValue(szPunishmentType, new Callable(hPlugin, GetNativeFunction(2)));
+
+    if (g_bReady)
+    {
+        QueryCheckPunishmentType(szPunishmentType);
+    }
+
+    return 0;
+}
+
+_NATIVE_SIMPLE(UnregisterPunishmentType)
+{
+    char szPunishmentType[64];
+    GetNativeString(1, szPunishmentType, sizeof(szPunishmentType));
+
+    Callable hCallable;
+    if (!g_hHandlers.GetValue(szPunishmentType, hCallable))
+    {
+        return ThrowNativeError(SP_ERROR_NATIVE, "Handler for this punishment type (%s) is not registered", szPunishmentType);
+    }
+
+    if (hCallable.Plugin != hPlugin)
+    {
+        return ThrowNativeError(SP_ERROR_NATIVE, "Unregistration for this punishment type (%s) is unavailable with this security identifier", szPunishmentType);
+    }
+
+    hCallable.Close();
+    return 0;
+}
+
+/**
+ * @section Methodmap "UPSPunishment"
+ */
+int MethodmapGeneric(int iFieldId, int iIfNull = 0)
+{
+    DBResultSet hResults = GetNativeCell(1);
+
+    if (!hResults.IsFieldNull(iFieldId))
+        return hResults.FetchInt(iFieldId);
+    return iIfNull;
+}
+
+int MethodmapString(int iFieldId, int iLength = 32, const char[] szDefaultValue = NULL_STRING)
+{
+    DBResultSet hResults = GetNativeCell(1);
+    char[] szBuffer = new char[iLength];
+
+    if (!hResults.IsFieldNull(iFieldId))
+    {
+        hResults.FetchString(iFieldId, szBuffer, iLength);
+    }
+    else
+    {
+        strcopy(szBuffer, iLength, szDefaultValue);
+    }
+
+    int iSize;
+    SetNativeString(2, szBuffer, GetNativeCell(3), true, iSize);
+    return iSize;
+}
+
+_NATIVE_METHODMAP(UPSPunishment_PunishmentId_get)       { return MethodmapGeneric(0);       }
+_NATIVE_METHODMAP(UPSPunishment_AdministratorId_get)    { return MethodmapGeneric(2);       }
+_NATIVE_METHODMAP(UPSPunishment_GetAdministratorName)   { return MethodmapString(3);        }
+_NATIVE_METHODMAP(UPSPunishment_GetAdministratorIP)     { return MethodmapString(4);        }
+_NATIVE_METHODMAP(UPSPunishment_PlayerId_get)           { return MethodmapGeneric(5);       }
+_NATIVE_METHODMAP(UPSPunishment_GetPlayerName)          { return MethodmapString(6);        }
+_NATIVE_METHODMAP(UPSPunishment_GetPlayerIP)            { return MethodmapString(7);        }
+_NATIVE_METHODMAP(UPSPunishment_Created_get)            { return MethodmapGeneric(8);       }
+_NATIVE_METHODMAP(UPSPunishment_Ends_get)               { return MethodmapGeneric(9);       }
+_NATIVE_METHODMAP(UPSPunishment_Length_get)             { return MethodmapGeneric(10);      }
+_NATIVE_METHODMAP(UPSPunishment_GetServerIP)            { return MethodmapString(11);       }
+_NATIVE_METHODMAP(UPSPunishment_ServerPort_get)         { return MethodmapGeneric(12);      }
+_NATIVE_METHODMAP(UPSPunishment_GetServerHostname)      { return MethodmapString(13, 256);  }
+_NATIVE_METHODMAP(UPSPunishment_GetReason)              { return MethodmapString(14, 256);  }
 
 /**
  * @section Startup logic
@@ -116,7 +299,14 @@ public void OnPluginStart()
  */
 public void OnClientAuthorized(int iClient, const char[] szAuthId)
 {
-    if (!g_hDB || !g_hConfiguration) return;
+    if (!g_bReady || !g_hDB || !g_hConfiguration || IsFakeClient(iClient)) return;
+
+    ProcessClient(iClient);
+}
+
+void ProcessClient(int iClient)
+{
+    QueryInsertClient(iClient);
 
     int iSteam = GetSteamAccountID(iClient);
     if (!iSteam)
@@ -133,23 +323,25 @@ public void OnClientAuthorized(int iClient, const char[] szAuthId)
     }
 
     // Build database query.
-    char szQuery[1536];
-    g_hDB.FormatEx(szQuery, sizeof(szQuery),
+    char szQuery[2048];
+    g_hDB.Format(szQuery, sizeof(szQuery),
     "\
         SELECT \
+            `ups_punishment`.`punishment_id` AS `punishment_id`, \
             `ups_punishment_type`.`type_name` AS `punishment_type`, \
             `ups_punishment`.`admin_id` AS `admin_id`, \
             IFNULL(`admin`.`username`, `ups_punishment`.`admin_username`) AS `admin_username`, \
-            `ups_punishment`.`admin_ip` AS `admin_ip`, \
+            INET_NTOA(`ups_punishment`.`admin_ip`) AS `admin_ip`, \
             `ups_punishment`.`player_id` AS `player_id`, \
             IFNULL(`player`.`username`, `ups_punishment`.`player_username`) AS `player_username`, \
-            `ups_punishment`.`player_ip` AS `player_ip`, \
+            INET_NTOA(`ups_punishment`.`player_ip`) AS `player_ip`, \
             `created`, \
             `ends`, \
             `length`, \
             INET_NTOA(`ups_server`.`address`) AS `server_address`, \
             `ups_server`.`port` AS `server_port`, \
-            `ups_server`.`hostname` AS `server_hostname` \
+            `ups_server`.`hostname` AS `server_hostname`, \
+            `ups_punishment`.`reason` AS `reason` \
         \
         FROM \
             `ups_punishment` \
@@ -169,6 +361,21 @@ public void OnClientAuthorized(int iClient, const char[] szAuthId)
             %!s \
     ", iSteam, szServerQuery);
     SQL_ExecuteQuery(SQL_QueryBans, szQuery, GetClientUserId(iClient), DBPrio_High, "QueryBans()");
+}
+
+public Action OnQueueTriggered(Handle hTimer, int iClient)
+{
+    if ((iClient = GetClientOfUserId(iClient)) == 0)
+    {
+        return;
+    }
+
+    ProcessClient(iClient);
+}
+
+void RequeuePunishmentLoading(int iClient, int iCooldown)
+{
+    CreateTimer(float(iCooldown), OnQueueTriggered, GetClientUserId(iClient));
 }
 
 /**
@@ -204,8 +411,7 @@ void QueryServer()
     hPack.WriteString(szAddress);
     hPack.WriteString(szHostname);
 
-    char szQuery[256];
-    // TODO: rework query and handler.
+    char szQuery[128];
     g_hDB.Format(szQuery, sizeof(szQuery), "SELECT `server_id` FROM `ups_server` WHERE `address` = INET_ATON('%s') AND `port` = %d", szAddress, iPort);
     SQL_ExecuteQuery(SQL_QueryServer, szQuery, hPack, DBPrio_High, "QueryServer()");
 }
@@ -224,7 +430,39 @@ void QueryUpdateServer()
     if (szHostname[0] == 0) UTIL_GetServerHostname(szHostname, sizeof(szHostname));
 
     g_hDB.Format(szQuery, sizeof(szQuery), "UPDATE `ups_server` SET `hostname` = '%s' WHERE `server_id` = %d", szHostname, g_iServerID);
-    SQL_ExecuteQuery(SQL_GlobalResultHandle, szQuery, 101, DBPrio_High, "QueryUpdateServer())");
+    SQL_ExecuteQuery(SQL_GlobalResultHandle, szQuery, 101, DBPrio_High, "QueryUpdateServer()");
+}
+
+void QueryCheckPunishmentType(const char[] szPunishmentType)
+{
+    char szQuery[148];
+    g_hDB.Format(szQuery, sizeof(szQuery), "SELECT `punishment_type_id` FROM `ups_punishment_type` WHERE `type_name` = '%s'", szPunishmentType);
+
+    DataPack hPack = new DataPack();
+    hPack.WriteString(szPunishmentType);
+
+    SQL_ExecuteQuery(SQL_CheckPunishmentType, szQuery, hPack, DBPrio_Normal, "QueryCheckPunishmentType()");
+}
+
+void QueryCreatePunishmentType(const char[] szPunishmentType)
+{
+    char szQuery[164];
+    g_hDB.Format(szQuery, sizeof(szQuery), "INSERT INTO `ups_punishment_type` (`type_name`, `registered_at`) VALUES('%s', UNIX_TIMESTAMP())", szPunishmentType);
+
+    SQL_ExecuteQuery(SQL_GlobalResultHandle, szQuery, 201, DBPrio_High, "QueryCreatePunishmentType()");
+}
+
+void QueryInsertClient(int iClient)
+{
+    int iSteam = GetSteamAccountID(iClient);
+    if (!iSteam)
+    {
+        return;
+    }
+
+    char szQuery[512];
+    g_hDB.Format(szQuery, sizeof(szQuery), "INSERT IGNORE INTO `ups_player` (`account_id`, `username`, `last_activity`) VALUES (%d, '%N', UNIX_TIMESTAMP()) ON DUPLICATE KEY UPDATE `username` = '%N', `last_activity` = UNIX_TIMESTAMP()", iSteam, iClient, iClient);
+    SQL_ExecuteQuery(SQL_GlobalResultHandle, szQuery, 301, DBPrio_High, "QueryInsertClient()");
 }
 
 /**
@@ -237,6 +475,8 @@ public void SQL_GlobalResultHandle(Database hDb, DBResultSet hResults, const cha
      *
      * 101  <-> Update hostname
      * 102  <-> Update Server ID
+     * 201  <-> Create punishment type
+     * 301  <-> Create player
      */
     if (hResults)
     {
@@ -304,14 +544,89 @@ public void SQL_CreateServer(Database hDB, DBResultSet hResults, const char[] sz
     CheckLateLoad();
 }
 
+public void SQL_CheckPunishmentType(Database hDB, DBResultSet hResults, const char[] szError, DataPack hPack)
+{
+    char szPunishmentType[64];
+    hPack.Reset();
+    hPack.ReadString(szPunishmentType, sizeof(szPunishmentType));
+    hPack.Close();
+
+    if (!hResults)
+    {
+        LogError("Couldn't verify punishment type '%s' in database: %s", szPunishmentType, szError);
+        return;
+    }
+
+    if (!hResults.FetchRow())
+    {
+        QueryCreatePunishmentType(szPunishmentType);
+    }
+}
+
+public void SQL_QueryBans(Database hDB, DBResultSet hResults, const char[] szError, int iClient)
+{
+    if ((iClient = GetClientOfUserId(iClient)) == 0)
+    {
+        return;
+    }
+
+    if (!hResults)
+    {
+        LogError("Database failure when fetching punishments for %L: %s", iClient, szError);
+        RequeuePunishmentLoading(iClient, 45);
+        return;
+    }
+
+    if (hResults.HasResults && hResults.RowCount)
+    {
+        char szPunishmentType[64];
+        Callable hHandler;
+        Action eAction;
+
+        while (hResults.FetchRow())
+        {
+            // First, check punishment type handler.
+            hResults.FetchString(1, szPunishmentType, sizeof(szPunishmentType));
+            if (!g_hHandlers.GetValue(szPunishmentType, hHandler))
+            {
+                LogError("Can't handle punishment type (%s) for %L (punishment id - %d): Handler is not registered.", szPunishmentType, iClient, hResults.FetchInt(0));
+                continue;
+            }
+
+            // Call handler.
+            hHandler.Start();
+            Call_PushCell(iClient);
+            Call_PushCell(hResults);
+            Call_Finish(eAction);
+
+            if (eAction <= Plugin_Handled)
+            {
+                break;
+            }
+        }
+    }
+}
+
 /**
  * @section Late load
  */
 void CheckLateLoad()
 {
+    // First, check all punishment types.
+    StringMapSnapshot hShot = g_hHandlers.Snapshot();
+    int iLength = hShot.Length;
+    char szPunishmentType[64];
+    for (int iPunishmentTypeId; iPunishmentTypeId < iLength; ++iPunishmentTypeId)
+    {
+        hShot.GetKey(iPunishmentTypeId, szPunishmentType, sizeof(szPunishmentType));
+        QueryCheckPunishmentType(szPunishmentType);
+    }
+    hShot.Close();
+
+    // Second, check all players.
     for (int iClient = MaxClients; iClient > 0; --iClient)
     {
-        if (IsClientInGame(iClient) IsClientAuthorized(iClient))
+        if (IsClientInGame(iClient) && IsClientAuthorized(iClient))
         {
             OnClientAuthorized(iClient, NULL_STRING);
         }
@@ -341,13 +656,7 @@ void UTIL_GetServerAddress(char[] szBuffer, int iBufferSize)
     }
 
     int iIp = hostip.IntValue;
-    FormatEx(
-        szBuffer, iBufferSize, "%d.%d.%d.%d",
-        (iIp >> 24)     & 0xFF,
-        (iIp >> 16)     & 0xFF,
-        (iIp >> 8 )     & 0xFF,
-        (iIp      )     & 0xFF
-    );
+    UTIL_FormatIP(iIp, szBuffer, iBufferSize);
 }
 
 void UTIL_GetServerHostname(char[] szBuffer, int iBufferSize)
@@ -359,4 +668,15 @@ void UTIL_GetServerHostname(char[] szBuffer, int iBufferSize)
     }
 
     hostname.GetString(szBuffer, iBufferSize);
+}
+
+void UTIL_FormatIP(int iIp, char[] szBuffer, int iBufferSize)
+{
+    FormatEx(
+        szBuffer, iBufferSize, "%d.%d.%d.%d",
+        (iIp >> 24)     & 0xFF,
+        (iIp >> 16)     & 0xFF,
+        (iIp >> 8 )     & 0xFF,
+        (iIp      )     & 0xFF
+    );
 }
