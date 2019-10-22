@@ -106,7 +106,7 @@ Database    g_hDB;
 
 public Plugin myinfo = {
     description = "Punishments loader",
-    version     = "0.0.0.2",
+    version     = "0.0.0.4",
     author      = "CrazyHackGUT aka Kruzya",
     name        = "[UPS] Core",
     url         = "https://kruzya.me"
@@ -201,6 +201,7 @@ _NATIVE_SIMPLE(UnregisterPunishmentType)
     }
 
     hCallable.Close();
+    g_hHandlers.Remove(szPunishmentType);
     return 0;
 }
 
