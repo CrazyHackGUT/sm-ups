@@ -1,9 +1,39 @@
 "Phrases"
 {
+    "UPS.Type.ban"
+    {
+        "en"        "Ban"
+        "ru"        "Бан"
+    }
+
+    "UPS.Type.comm_voice"
+    {
+        "en"        "Voice chat"
+        "ru"        "Голос. чат"
+    }
+
+    "UPS.Type.comm_text"
+    {
+        "en"        "Text chat"
+        "ru"        "Текст. чат"
+    }
+
+    "UPS.ChatPrefix"
+    {
+        "en"        "[UPS]"
+    }
+
     "UPS.YouRePunished"
     {
         "en"        "You're punished!"
         "ru"        "Вы наказаны!"
+    }
+
+    "UPS.YouRePunished.Comm"
+    {
+        "#format"   "{1:t}"
+        "en"        "You're communications with \"{1}\" disabled!"
+        "ru"        "Ваше средство общения \"{1}\" отключено!"
     }
 
     "UPS.AdministratorName"
@@ -38,5 +68,12 @@
     {
         "en"        "Never"
         "ru"        "Никогда"
+    }
+
+    "UPS.PunishmentExpired.Comm"
+    {
+        "#format"   "{1:t}"
+        "en"        "You're communications with \"{1}\" available now"
+        "ru"        "Ваше средство общения \"{1}\" доступно снова"
     }
 }
