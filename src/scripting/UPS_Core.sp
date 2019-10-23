@@ -9,80 +9,7 @@
 #include <sourcemod>
 #include <dbi>
 #include <ups>
-methodmap Callable < Handle
-{
-    public Callable(Handle hPlugin, Function ptrCall)
-    {
-        DataPack hPack = new DataPack();
-        hPack.WriteCell(hPlugin);
-        hPack.WriteFunction(ptrCall);
-
-        return view_as<Callable>(hPack);
-    }
-
-    property Handle Plugin
-    {
-        public get()
-        {
-            DataPack hPack = view_as<DataPack>(this);
-
-            hPack.Reset();
-            return hPack.ReadCell();
-        }
-
-        public set(Handle hPlugin)
-        {
-            DataPack hPack = view_as<DataPack>(this);
-
-            hPack.Reset();
-            hPack.WriteCell(hPlugin);
-        }
-    }
-
-    property Function FuncPointer
-    {
-        public get()
-        {
-            DataPack hPack = view_as<DataPack>(this);
-
-            hPack.Reset();
-            hPack.ReadCell();
-            return hPack.ReadFunction();
-        }
-
-        public set(Function ptrFunc)
-        {
-            DataPack hPack = view_as<DataPack>(this);
-
-            hPack.Reset();
-            hPack.ReadCell();
-            hPack.WriteFunction(ptrFunc);
-        }
-    }
-
-    public bool IsValid()
-    {
-        Handle hPlugin = this.Plugin;
-        bool bValid = false;
-        Handle hIter = GetPluginIterator();
-        while (MorePlugins(hIter))
-        {
-            if (hPlugin == ReadPlugin(hIter))
-            {
-                bValid = true;
-                break;
-            }
-        }
-
-        hIter.Close();
-        return bValid;
-    }
-
-    public void Start()
-    {
-        Call_StartFunction(this.Plugin, this.FuncPointer);
-    }
-}
+#include <ups_util/callable>
 
 bool    g_bReady = false;
 
@@ -106,7 +33,7 @@ Database    g_hDB;
 
 public Plugin myinfo = {
     description = "Punishments loader",
-    version     = "0.0.0.4",
+    version     = "1.0.0.0",
     author      = "CrazyHackGUT aka Kruzya",
     name        = "[UPS] Core",
     url         = "https://kruzya.me"
