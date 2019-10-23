@@ -1,0 +1,81 @@
+name: UPS Plugin
+
+on:
+  push:
+    paths:
+      - './src/*'
+      - './.github/workflows/*'
+  schedule:
+    # https://crontab.guru/#15_0_*/7_*_*
+    - cron: '15 0 */7 * *'
+
+jobs:
+  build:
+    name: Build plugins
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        sourcemod: ["1.9", "1.10", "1.11"]
+        parameters: ["", "_UPS_DEBUG=1"]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v1
+
+    - name: Download SourceMod archive
+      env:
+        SMVERSION: ${{ matrix.sourcemod }}
+      run: |
+        mkdir -p am/sm
+        wget -q "http://www.sourcemod.net/latest.php?version=$SMVERSION&os=linux" -O am/sm/sourcemod.tar.gz
+        cd am/sm
+        tar -xzf sourcemod.tar.gz
+        cd ../..
+
+    - name: Compile plugin
+      env:
+        SMPATH: am/sm/addons/sourcemod/scripting
+        SOURCES: src/scripting
+        TARGET: plugins/UPS
+        SPCOMP_ARGS: ${{ matrix.parameters }}
+      run: |
+        mkdir -p plugins/UAS/optional
+        ./$SMPATH/spcomp $SPCOMP_ARGS -i$SMPATH/include -i$SOURCES/include -o$TARGET/Core $SOURCES/UPS_Core.sp
+
+  # https://github.community/t5/GitHub-Actions/github-actions-cannot-connect-to-mysql-service/td-p/30611
+  test:
+    name: Test MySQL dump
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        mysql: ["5.7", "8.0"]
+    services:
+      mysql:
+        image: "mysql:${{ matrix.mysql }}"
+        env:
+          MYSQL_ROOT_PASSWORD: "ups"
+        ports:
+        - 3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+
+      - name: Install MySQL console client
+        env:
+          MYPASSWD: "ups"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+          mysql --host 127.0.0.1 --port ${{ job.services.mysql.ports['3306'] }} -uroot -p$MYPASSWD -e "SHOW DATABASES"
+      - name: Import MySQL dump
+        env:
+          MYPASSWD: "ups"
+          MYDATABASE: "ups"
+        run: |
+          mysql --host 127.0.0.1 --port ${{ job.services.mysql.ports['3306'] }} -uroot -p$MYPASSWD -e "CREATE DATABASE \`$MYDATABASE\`"
+          mysql --host 127.0.0.1 --port ${{ job.services.mysql.ports['3306'] }} -uroot -p$MYPASSWD $MYDATABASE < src/database/migrate_0001_initial.sql
+          mysql --host 127.0.0.1 --port ${{ job.services.mysql.ports['3306'] }} -uroot -p$MYPASSWD $MYDATABASE < src/database/migrate_0002_table_keys.sql
