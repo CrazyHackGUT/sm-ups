@@ -42,6 +42,7 @@ jobs:
       run: |
         mkdir -p plugins/UAS/optional
         ./$SMPATH/spcomp $SPCOMP_ARGS -i$SMPATH/include -i$SOURCES/include -o$TARGET/Core $SOURCES/UPS_Core.sp
+        ./$SMPATH/spcomp $SPCOMP_ARGS -i$SMPATH/include -i$SOURCES/include -o$TARGET/Ban $SOURCES/UPS_Ban.sp
 
   # https://github.community/t5/GitHub-Actions/github-actions-cannot-connect-to-mysql-service/td-p/30611
   test:

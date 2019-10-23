@@ -36,6 +36,7 @@ before_script:
 
 script:
     - ./spcomp $COMPILER_PARAMS UPS.git.sp UPS_Core.sp -E -oUPS/Core
+    - ./spcomp $COMPILER_PARAMS UPS.git.sp UPS_Ban.sp -E -oUPS/Ban
 
 before_deploy:
     - export CUSTOM_POSTFIX=_$SMVERSION
