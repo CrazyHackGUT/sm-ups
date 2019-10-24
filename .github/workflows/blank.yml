@@ -40,7 +40,7 @@ jobs:
         TARGET: plugins/UPS
         SPCOMP_ARGS: ${{ matrix.parameters }}
       run: |
-        mkdir -p plugins/UAS/optional
+        mkdir -p $TARGET/optional
         ./$SMPATH/spcomp $SPCOMP_ARGS -i$SMPATH/include -i$SOURCES/include -o$TARGET/Core $SOURCES/UPS_Core.sp
         ./$SMPATH/spcomp $SPCOMP_ARGS -i$SMPATH/include -i$SOURCES/include -o$TARGET/Ban $SOURCES/UPS_Ban.sp
 
