@@ -57,6 +57,8 @@ methodmap UPSPunishment < Handle {
     public native int GetServerHostname(char[] szBuffer, int iBufferLength);
 
     public native int GetReason(char[] szBuffer, int iBufferLength);
+
+    public native int GetType(char[] szBuffer, int iBufferLength);
 }
 
 /**
@@ -76,6 +78,21 @@ typeset UPSHandler {
      * @param   hPunishment Punishment result set (DON'T CHANGE ROW).
      */
     function Action(int iClient, DBResultSet hPunishment);
+
+    // Implemented in v1.0.0.1
+    /**
+     * @param   iClient     Client identifier.
+     * @param   hPunishment Punishment wrapped by core.
+     * @param   szType      Punishment type.
+     */
+    function Action(int iClient, UPSPunishment hPunishment, const char[] szType);
+
+    /**
+     * @param   iClient     Client identifier.
+     * @param   hPunishment Punishment result set (DON'T CHANGE ROW).
+     * @param   szType      Punishment type.
+     */
+    function Action(int iClient, DBResultSet hPunishment, const char[] szType);
 }
 
 /**
@@ -151,5 +168,8 @@ public void __pl_ups_SetNTVOptional()
     // v0.0.0.3, Methodmap "UPSPunishment"
     MarkNativeAsOptional("UPSPunishment.PunishmentId.get");
     MarkNativeAsOptional("UPSPunishment.GetReason");
+
+    // v1.0.0.1
+    MarkNativeAsOptional("UPSPunishment.GetType");
 }
 #endif // defined REQUIRE_PLUGIN

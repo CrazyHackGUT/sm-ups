@@ -33,7 +33,7 @@ Database    g_hDB;
 
 public Plugin myinfo = {
     description = "Punishments loader",
-    version     = "1.0.0.0",
+    version     = "1.0.0.1",
     author      = "CrazyHackGUT aka Kruzya",
     name        = "[UPS] Core",
     url         = "https://kruzya.me"
@@ -69,6 +69,7 @@ public APLRes AskPluginLoad2(Handle hMySelf, bool bLate, char[] szBuffer, int iB
     CreateNative("UPSPunishment.GetPlayerName",         Methodmap_UPSPunishment_GetPlayerName);
     CreateNative("UPSPunishment.GetServerHostname",     Methodmap_UPSPunishment_GetServerHostname);
     CreateNative("UPSPunishment.GetReason",             Methodmap_UPSPunishment_GetReason);
+    CreateNative("UPSPunishment.GetType",               Methodmap_UPSPunishment_GetType);
 
     g_hHandlers = new StringMap();
 
@@ -177,6 +178,7 @@ _NATIVE_METHODMAP(UPSPunishment_GetServerIP)            { return MethodmapString
 _NATIVE_METHODMAP(UPSPunishment_ServerPort_get)         { return MethodmapGeneric(12);      }
 _NATIVE_METHODMAP(UPSPunishment_GetServerHostname)      { return MethodmapString(13, 256);  }
 _NATIVE_METHODMAP(UPSPunishment_GetReason)              { return MethodmapString(14, 256);  }
+_NATIVE_METHODMAP(UPSPunishment_GetType)                { return MethodmapString(1, 64);    }
 
 /**
  * @section Startup logic
@@ -525,6 +527,7 @@ public void SQL_QueryBans(Database hDB, DBResultSet hResults, const char[] szErr
             hHandler.Start();
             Call_PushCell(iClient);
             Call_PushCell(hResults);
+            Call_PushString(szPunishmentType);
             Call_Finish(eAction);
 
             if (eAction <= Plugin_Handled)
